@@ -105,6 +105,11 @@ impl Lexer {
 
                 Ok(self.token(TokenKind::String, buffer, start))
             }
+            Some(c) if c.is_whitespace() => {
+                self.index += 1;
+                self.pos.new_line();
+                self.next_token()
+            }
             Some(c) => {
                 self.index += 1;
                 self.pos.col += 1;
