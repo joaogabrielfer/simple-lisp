@@ -15,23 +15,38 @@ mod source;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    file_path: String,
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(clap::Subcommand, Debug, Clone)]
+enum Command {
+    Run { path: String },
+    Eval { code: String },
 }
 
 fn main() {
     let args = Args::parse();
 
-    let lexer = Lexer::new(
-        args.file_path.clone(),
-        read_to_string(args.file_path).unwrap(),
-    );
+    let (source_path, source, is_eval) = match args.command {
+        Command::Run { path } => (path.clone(), read_to_string(path).unwrap(), false),
+        Command::Eval { code } => ("<eval>".to_string(), code, true),
+    };
+
+    let lexer = Lexer::new(source_path, source);
 
     // for tk in lexer.clone() {
     //     println!("{}", tk.unwrap())
     // }
     let mut parser = parser::Parser::new(lexer);
     let mut env = Env::default().clone_with(builtins::builtins());
-    Interpreter::new(parser.parse().unwrap())
+    let values = Interpreter::new(parser.parse().unwrap())
         .run_program(&mut env)
         .unwrap();
+
+    if is_eval {
+        for v in values {
+            println!("{v}")
+        }
+    }
 }

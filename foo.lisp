@@ -1,2 +1,3 @@
-(def foo (add 2 (mul 2 3)))
-(println foo)
+(def foo
+	 (add 2 (mul 2 3)))
+foo
