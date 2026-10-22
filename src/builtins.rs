@@ -1,125 +1,118 @@
 use crate::{
-    interpreter::{Interpreter, Parameter, Value},
+    interpreter::{
+        Interpreter, Parameter,
+        Value::{self, Atom},
+    },
     parser::Expr,
 };
 
+macro_rules! bind_arg {
+    ($env:expr, $expr:expr, raw, $pat:pat) => {
+        let $pat = $expr else {
+            todo!("report runtime type error")
+        };
+    };
+
+    ($env:expr, $expr:expr, eval, $pat:pat) => {
+        #[allow(irrefutable_let_patterns)]
+        let $pat = Interpreter::run($expr, $env)? else {
+            todo!("report runtime type error")
+        };
+    };
+}
+
+macro_rules! builtin {
+    (
+        $name:ident |$env:ident| (
+            $(
+                $mode:ident $param:ident : $pat:pat
+            ),* $(,)?
+        ) $body:block
+    ) => {
+        (
+            stringify!($name).to_string(),
+            Value::BuiltinFunction {
+                params: vec![
+                    $(
+                        Parameter {
+                            name: stringify!($param).to_string(),
+                        },
+                    )*
+                ],
+                body: |$env, args| {
+                    let expected = 0usize $(+ {
+                        let _ = stringify!($param);
+                        1usize
+                    })*;
+
+                    if args.len() != expected {
+                        todo!("report arity error")
+                    }
+
+                    let mut iter = args.iter();
+
+                    $(
+                        bind_arg!(
+                            $env,
+                            iter.next().unwrap(),
+                            $mode,
+                            $pat
+                        );
+                    )*
+
+                    $body
+                },
+            },
+        )
+    };
+}
+
+macro_rules! atom {
+    ($a:ident) => {
+        Value::Atom(stringify!($a).into())
+    };
+}
+
 pub fn builtins() -> Vec<(String, Value)> {
     [
-        (
-            "add".to_string(),
-            Value::BuiltinFunction {
-                params: vec![
-                    Parameter {
-                        name: "a".to_string(),
-                    },
-                    Parameter {
-                        name: "b".to_string(),
-                    },
-                ],
-                body: |env, args| {
-                    if args.len() != 2 {
-                        todo!("return wrong parameter count error")
-                    }
-
-                    let mut args = args.to_vec();
-                    args.reverse();
-
-                    let Ok(Value::Number(a)) = Interpreter::run(&args.pop().unwrap(), env) else {
-                        todo!("report runtime type error")
-                    };
-
-                    let Ok(Value::Number(b)) = Interpreter::run(&args.pop().unwrap(), env) else {
-                        todo!("report runtime type error")
-                    };
-
-                    Ok(Value::Number(a + b))
-                },
-            },
-        ),
-        (
-            "mul".to_string(),
-            Value::BuiltinFunction {
-                params: vec![
-                    Parameter {
-                        name: "a".to_string(),
-                    },
-                    Parameter {
-                        name: "b".to_string(),
-                    },
-                ],
-                body: |env, args| {
-                    if args.len() != 2 {
-                        todo!("return wrong parameter count error")
-                    }
-
-                    let mut args = args.to_vec();
-                    args.reverse();
-
-                    let Ok(Value::Number(a)) = Interpreter::run(&args.pop().unwrap(), env) else {
-                        todo!("report runtime type error")
-                    };
-
-                    let Ok(Value::Number(b)) = Interpreter::run(&args.pop().unwrap(), env) else {
-                        todo!("report runtime type error")
-                    };
-
-                    Ok(Value::Number(a * b))
-                },
-            },
-        ),
-        (
-            "println".to_string(),
-            Value::BuiltinFunction {
-                params: vec![Parameter {
-                    name: "s".to_string(),
-                }],
-                body: |env, args| {
-                    if args.len() != 1 {
-                        todo!("return wrong parameter count error")
-                    }
-
-                    let mut args = args.to_vec();
-                    args.reverse();
-
-                    let v = Interpreter::run(&args.pop().unwrap(), env)?;
-
-                    println!("{v}");
-
-                    Ok(Value::Atom("unit".to_string()))
-                },
-            },
-        ),
-        (
-            "def".to_string(),
-            Value::BuiltinFunction {
-                params: vec![
-                    Parameter {
-                        name: "name".to_string(),
-                    },
-                    Parameter {
-                        name: "value".to_string(),
-                    },
-                ],
-                body: |env, args| {
-                    if args.len() != 2 {
-                        todo!("return wrong parameter count error")
-                    }
-
-                    let mut args = args.to_vec();
-                    args.reverse();
-
-                    let Expr::Ident(i) = args.pop().unwrap() else {
-                        todo!("report runtime type error")
-                    };
-
-                    let v = Interpreter::run(&args.pop().unwrap(), env)?;
-
-                    env.set(i, v);
-
-                    Ok(Value::Atom("ok".to_string()))
-                },
-            },
-        ),
+        builtin! {
+            add |env| (
+                eval a: Value::Number(a),
+                eval b: Value::Number(b)
+            ) {
+                Ok(Value::Number(a + b))
+            }
+        },
+        builtin! {
+            mul |env| (
+                eval a: Value::Number(a),
+                eval b: Value::Number(b)
+            ) {
+                Ok(Value::Number(a * b))
+            }
+        },
+        builtin! {
+            println |env| (
+                eval v: v
+            ) {
+                println!("{v}");
+                Ok(atom!(unit))
+            }
+        },
+        builtin! {
+            def |env| (
+                raw name: Expr::Ident(name),
+                eval value: value
+            ) {
+                env.set(name.clone(), value);
+                Ok(atom!(unit))
+            }
+        },
+        // builtin! {
+        //     lambda |env| (
+        //         raw params: Expr
+        //         )
+        // },
     ]
-    .to_vec()
+    .into()
 }
