@@ -28,11 +28,16 @@ impl Interpreter {
                 Some(v) => Ok((*v).clone()),
                 None => todo!("report unknown identifier error"),
             },
-            Expr::Application { operator, operand } => {
-                let Expr::Ident(ref name) = **operator else {
+            Expr::List(exprs) => {
+                let Some(Expr::Ident(name)) = exprs.first() else {
                     todo!("report expected ident error")
                 };
 
+                let operand = {
+                    let mut temp = exprs.clone();
+                    temp.remove(0);
+                    temp
+                };
                 match env.get(name.clone()) {
                     Some(Value::Function { params, body }) => {
                         if operand.len() != params.len() {
@@ -61,7 +66,7 @@ impl Interpreter {
                             todo!("report wrong argument count error")
                         }
 
-                        body(env, operand)
+                        body(env, &operand)
                     }
                     Some(_) => todo!("report expected function error"),
                     None => todo!("report unknown identifier {name} error"),

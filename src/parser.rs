@@ -12,10 +12,7 @@ pub enum Expr {
     NumberLit(i32),
     StringLit(String),
     Ident(String),
-    Application {
-        operator: Box<Expr>,
-        operand: Vec<Expr>,
-    },
+    List(Vec<Expr>),
 }
 
 pub struct Parser {
@@ -42,21 +39,17 @@ impl Parser {
         match self.lexer.next()? {
             Ok(tk) => match tk.kind {
                 TokenKind::OpenParen => {
-                    let operator = match self.expect_expr() {
-                        Ok(expr) => Box::new(expr),
-                        Err(e) => return Some(Err(e)),
-                    };
-                    let mut operand = vec![];
+                    let mut exprs = vec![];
                     while let Some(Ok(tk)) = self.lexer.peek()
                         && tk.kind != TokenKind::CloseParen
                     {
-                        operand.push(match self.expect_expr() {
+                        exprs.push(match self.expect_expr() {
                             Ok(expr) => expr,
                             Err(e) => return Some(Err(e)),
                         })
                     }
                     self.expect(TokenKind::CloseParen);
-                    Some(Ok(Expr::Application { operator, operand }))
+                    Some(Ok(Expr::List(exprs)))
                 }
                 TokenKind::CloseParen => Some(Err(ParserError {
                     kind: UnexpectedToken(TokenKind::CloseParen),
