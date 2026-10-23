@@ -28,50 +28,80 @@ impl Interpreter {
                 Some(v) => Ok((*v).clone()),
                 None => todo!("report unknown identifier error"),
             },
-            Expr::List(exprs) => {
-                let Some(Expr::Ident(name)) = exprs.first() else {
-                    todo!("report expected ident error")
-                };
+            Expr::List(exprs) => match exprs.first() {
+                Some(Expr::Ident(name)) => {
+                    let operands = {
+                        let mut temp = exprs.clone();
+                        temp.remove(0);
+                        temp
+                    };
+                    match env.get(name.clone()) {
+                        Some(Value::Function { params, body }) => {
+                            if operands.len() != params.len() {
+                                todo!("report wrong argument count error")
+                            }
 
-                let operand = {
-                    let mut temp = exprs.clone();
-                    temp.remove(0);
-                    temp
-                };
-                match env.get(name.clone()) {
-                    Some(Value::Function { params, body }) => {
-                        if operand.len() != params.len() {
-                            todo!("report wrong argument count error")
+                            let curr_env = env.clone();
+                            Interpreter::run(
+                                body,
+                                &mut env.clone_with(
+                                    params
+                                        .iter()
+                                        .map(|p| p.name.clone())
+                                        .zip(
+                                            operands
+                                                .iter()
+                                                .map(|op| {
+                                                    Interpreter::run(op, &mut curr_env.clone())
+                                                })
+                                                .collect::<Result<Vec<_>, _>>()?,
+                                        )
+                                        .collect(),
+                                ),
+                            )
                         }
+                        Some(Value::BuiltinFunction { params, body }) => {
+                            if operands.len() != params.len() {
+                                todo!("report wrong argument count error")
+                            }
 
-                        let curr_env = env.clone();
-                        Interpreter::run(
-                            body,
-                            &mut env.clone_with(
-                                params
-                                    .iter()
-                                    .map(|p| p.name.clone())
-                                    .zip(
-                                        operand
-                                            .iter()
-                                            .map(|op| Interpreter::run(op, &mut curr_env.clone()))
-                                            .collect::<Result<Vec<_>, _>>()?,
-                                    )
-                                    .collect(),
-                            ),
-                        )
-                    }
-                    Some(Value::BuiltinFunction { params, body }) => {
-                        if operand.len() != params.len() {
-                            todo!("report wrong argument count error")
+                            body(env, &operands)
                         }
-
-                        body(env, &operand)
+                        _ => todo!("report expected function"),
                     }
-                    Some(_) => todo!("report expected function error"),
-                    None => todo!("report unknown identifier {name} error"),
                 }
-            }
+                Some(e) => {
+                    let Ok(Value::Function { params, body }) = Interpreter::run(e, env) else {
+                        todo!("report expected function")
+                    };
+                    let operands = {
+                        let mut temp = exprs.clone();
+                        temp.remove(0);
+                        temp
+                    };
+                    if operands.len() != params.len() {
+                        todo!("report wrong argument count error")
+                    }
+
+                    let curr_env = env.clone();
+                    Interpreter::run(
+                        &body,
+                        &mut env.clone_with(
+                            params
+                                .iter()
+                                .map(|p| p.name.clone())
+                                .zip(
+                                    operands
+                                        .iter()
+                                        .map(|op| Interpreter::run(op, &mut curr_env.clone()))
+                                        .collect::<Result<Vec<_>, _>>()?,
+                                )
+                                .collect(),
+                        ),
+                    )
+                }
+                None => todo!("report expected funtcion"),
+            },
         }
     }
 }
