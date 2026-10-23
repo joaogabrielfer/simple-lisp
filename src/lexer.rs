@@ -29,6 +29,7 @@ pub enum TokenKind {
 
     Number,
     String,
+    Atom,
 
     Eof,
 }
@@ -104,6 +105,37 @@ impl Lexer {
                 }
 
                 Ok(self.token(TokenKind::String, buffer, start))
+            }
+            Some(':') => {
+                self.index += 1;
+                self.pos.col += 1;
+                let mut buffer = String::new();
+                let start = self.pos;
+
+                while let Some(c) = self.source.chars().nth(self.index) {
+                    if c == ')' || c == '(' {
+                        break;
+                    }
+
+                    self.index += 1;
+                    if c.is_whitespace() {
+                        break;
+                    }
+                    if c == '\n' {
+                        self.pos.new_line();
+                        break;
+                    }
+
+                    self.pos.col += 1;
+
+                    if c == '"' {
+                        return Err(self.error(LexerErrorKind::UnexpectedCharacter('"'), self.pos));
+                    }
+
+                    buffer.push(c);
+                }
+
+                Ok(self.token(TokenKind::Atom, buffer, start))
             }
             Some(c) if c.is_whitespace() => {
                 self.index += 1;

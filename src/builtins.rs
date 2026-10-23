@@ -1,7 +1,7 @@
 use crate::{
     interpreter::{
         Interpreter, Parameter,
-        Value::{self, Atom},
+        Value::{self},
     },
     parser::Expr,
 };

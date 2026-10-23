@@ -59,6 +59,7 @@ impl Parser {
                 TokenKind::Ident => Some(Ok(Expr::Ident(tk.lexeme))),
                 TokenKind::Number => Some(Ok(Expr::NumberLit(tk.lexeme.parse().unwrap()))),
                 TokenKind::String => Some(Ok(Expr::StringLit(tk.lexeme))),
+                TokenKind::Atom => Some(Ok(Expr::AtomLit(tk.lexeme))),
                 TokenKind::Eof => None,
             },
             Err(e) => todo!(),
