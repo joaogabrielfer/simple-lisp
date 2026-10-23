@@ -1,13 +1,22 @@
+use miette::{Diagnostic, NamedSource, Report, Result, SourceOffset, SourceSpan};
 use thiserror::Error;
 
-use crate::{
-    lexer::{Lexer, TokenKind},
-    parser::ParserErrorKind::{UnexpectedEof, UnexpectedToken},
-    source::Span,
-};
+use crate::lexer::{Lexer, Token, TokenKind};
+
+#[derive(Clone, Debug)]
+pub struct Expr {
+    pub kind: ExprKind,
+    pub span: SourceSpan,
+}
+
+impl Expr {
+    fn new(kind: ExprKind, span: SourceSpan) -> Self {
+        Expr { kind, span }
+    }
+}
 
 #[derive(Debug, Clone)]
-pub enum Expr {
+pub enum ExprKind {
     AtomLit(String),
     NumberLit(i32),
     StringLit(String),
@@ -16,7 +25,7 @@ pub enum Expr {
 }
 
 pub struct Parser {
-    lexer: Lexer,
+    pub lexer: Lexer,
 }
 
 impl Parser {
@@ -24,7 +33,7 @@ impl Parser {
         Self { lexer }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Expr>, ParserError> {
+    pub fn parse(&mut self) -> Result<Vec<Expr>> {
         let mut exprs = vec![];
         loop {
             match self.parse_expr() {
@@ -35,12 +44,13 @@ impl Parser {
         }
     }
 
-    fn parse_expr(&mut self) -> Option<Result<Expr, ParserError>> {
+    fn parse_expr(&mut self) -> Option<Result<Expr>> {
         match self.lexer.next()? {
             Ok(tk) => match tk.kind {
                 TokenKind::OpenParen => {
+                    let start = tk.span.offset();
                     let mut exprs = vec![];
-                    while let Some(Ok(tk)) = self.lexer.peek()
+                    while let Ok(Some(tk)) = self.lexer.peek()
                         && tk.kind != TokenKind::CloseParen
                     {
                         exprs.push(match self.expect_expr() {
@@ -48,65 +58,78 @@ impl Parser {
                             Err(e) => return Some(Err(e)),
                         })
                     }
-                    self.expect(TokenKind::CloseParen);
-                    Some(Ok(Expr::List(exprs)))
+                    if let Some(Err(e)) = self.expect(TokenKind::CloseParen) {
+                        return Some(Err(e));
+                    }
+                    Some(Ok(self.expr(ExprKind::List(exprs), start)))
                 }
-                TokenKind::CloseParen => Some(Err(ParserError {
-                    kind: UnexpectedToken(TokenKind::CloseParen),
-                    source_path: self.lexer.source_path.clone(),
-                    pos: tk.pos,
-                })),
-                TokenKind::Ident => Some(Ok(Expr::Ident(tk.lexeme))),
-                TokenKind::Number => Some(Ok(Expr::NumberLit(tk.lexeme.parse().unwrap()))),
-                TokenKind::String => Some(Ok(Expr::StringLit(tk.lexeme))),
-                TokenKind::Atom => Some(Ok(Expr::AtomLit(tk.lexeme))),
+                TokenKind::CloseParen => Some(Err(self.token_error(tk))),
+                TokenKind::Ident => Some(Ok(Expr::new(ExprKind::Ident(tk.lexeme), tk.span))),
+                TokenKind::Number => Some(Ok(Expr::new(
+                    ExprKind::NumberLit(tk.lexeme.parse().unwrap()),
+                    tk.span,
+                ))),
+                TokenKind::String => Some(Ok(Expr::new(ExprKind::StringLit(tk.lexeme), tk.span))),
+                TokenKind::Atom => Some(Ok(Expr::new(ExprKind::AtomLit(tk.lexeme), tk.span))),
                 TokenKind::Eof => None,
             },
-            Err(e) => todo!(),
+            Err(e) => Some(Err(e)),
         }
     }
 
-    fn expect(&mut self, kind: TokenKind) -> Option<Result<(), ParserError>> {
+    fn expect(&mut self, kind: TokenKind) -> Option<Result<()>> {
         Some(match self.lexer.next() {
             Some(Ok(tk)) if tk.kind == kind => Ok(()),
-            Some(Ok(tk)) => Err(ParserError {
-                kind: ParserErrorKind::UnexpectedToken(tk.kind),
-                source_path: self.lexer.source_path.clone(),
-                pos: tk.pos,
-            }),
-            Some(Err(_e)) => todo!(),
-            None => Err(ParserError {
-                kind: ParserErrorKind::UnexpectedEof,
-                source_path: self.lexer.source_path.clone(),
-                pos: Span {
-                    start: self.lexer.pos,
-                    end: self.lexer.pos,
-                },
-            }),
+            Some(Ok(tk)) => Err(self.token_error(tk)),
+            Some(Err(e)) => Err(e),
+            None => Err(self.eof_error()),
         })
     }
 
-    fn expect_expr(&mut self) -> Result<Expr, ParserError> {
+    fn expect_expr(&mut self) -> Result<Expr> {
         match self.parse_expr() {
             Some(e) => e,
-            None => Err(ParserError {
-                kind: UnexpectedEof,
-                source_path: self.lexer.source_path.clone(),
-                pos: Span {
-                    start: self.lexer.pos,
-                    end: self.lexer.pos,
-                },
-            }),
+            None => Err(self.eof_error()),
+        }
+    }
+
+    fn eof_error(&self) -> Report {
+        ParserError {
+            src: NamedSource::new(self.lexer.source_path.clone(), self.lexer.source.clone()),
+            span: SourceSpan::new(SourceOffset::from(self.lexer.index - 1), 1),
+            kind: ParserErrorKind::UnexpectedEof,
+        }
+        .into()
+    }
+
+    fn token_error(&self, tk: Token) -> Report {
+        ParserError {
+            src: NamedSource::new(self.lexer.source_path.clone(), self.lexer.source.clone()),
+            span: tk.span,
+            kind: ParserErrorKind::UnexpectedToken(tk.kind),
+        }
+        .into()
+    }
+
+    fn expr(&self, kind: ExprKind, start: usize) -> Expr {
+        Expr {
+            kind,
+            span: SourceSpan::new(SourceOffset::from(start), self.lexer.index - start),
         }
     }
 }
 
-#[derive(Error, Debug)]
-#[error("{}:{}: {}",.source_path, .kind, .pos.start)]
+#[derive(Error, Debug, Diagnostic)]
+#[error("{kind}")]
+#[diagnostic(code(interpreter::parser))]
 pub struct ParserError {
-    kind: ParserErrorKind,
-    source_path: String,
-    pos: Span,
+    #[source_code]
+    pub src: NamedSource<String>,
+
+    #[label("error occurred here")]
+    pub span: SourceSpan,
+
+    pub kind: ParserErrorKind,
 }
 
 #[derive(Debug, Error, PartialEq)]

@@ -1,31 +1,52 @@
+use crate::interpreter::RuntimeErrorKind;
+use crate::interpreter::Ty;
 use crate::{
     interpreter::{
-        Interpreter, Parameter,
+        Parameter,
         Value::{self},
     },
-    parser::Expr,
+    parser::{Expr, ExprKind},
 };
 
 macro_rules! bind_arg {
-    ($env:expr, $expr:expr, raw, $pat:pat) => {
-        let $pat = $expr else {
-            todo!("report runtime type error")
+    ($i:expr, $env:expr, $expr:expr, raw, $expected:expr, $pat:pat) => {
+        let expr = $expr;
+
+        #[allow(irrefutable_let_patterns)]
+        let $pat = expr else {
+            return Err($i.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: $expected,
+                    got: None,
+                },
+                expr.span,
+            ));
         };
     };
 
-    ($env:expr, $expr:expr, eval, $pat:pat) => {
+    ($i:expr, $env:expr, $expr:expr, eval, $expected:expr, $pat:pat) => {
+        let expr = $expr;
+        let value = $i.run(expr, $env)?;
+        let got = value.ty();
+
         #[allow(irrefutable_let_patterns)]
-        let $pat = Interpreter::run($expr, $env)? else {
-            todo!("report runtime type error")
+        let $pat = value else {
+            return Err($i.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: $expected,
+                    got: Some(got),
+                },
+                expr.span,
+            ));
         };
     };
 }
 
 macro_rules! builtin {
     (
-        $name:ident |$env:ident| (
+        $name:ident |$i:ident, $env:ident| (
             $(
-                $mode:ident $param:ident : $pat:pat
+                $mode:ident $param:ident : $expected:expr => $pat:pat
             ),* $(,)?
         ) $body:block
     ) => {
@@ -39,24 +60,31 @@ macro_rules! builtin {
                         },
                     )*
                 ],
-                #[allow(unused_variables)]
-                body: |$env, args| {
+
+                #[allow(unused_variables, unused_mut)]
+                body: |$i, $env, args| {
                     let expected = 0usize $(+ {
                         let _ = stringify!($param);
                         1usize
                     })*;
 
                     if args.len() != expected {
-                        todo!("report arity error")
+                        miette::bail!(
+                            "Expected {} arguments, got {}",
+                            expected,
+                            args.len()
+                        );
                     }
 
                     let mut iter = args.iter();
 
                     $(
                         bind_arg!(
+                            $i,
                             $env,
                             iter.next().unwrap(),
                             $mode,
+                            $expected,
                             $pat
                         );
                     )*
@@ -77,52 +105,61 @@ macro_rules! atom {
 pub fn builtins() -> Vec<(String, Value)> {
     [
         builtin! {
-            add |env| (
-                eval a: Value::Number(a),
-                eval b: Value::Number(b)
+            add |i, env| (
+                eval a: Ty::Number => Value::Number(a),
+                eval b: Ty::Number => Value::Number(b)
             ) {
                 Ok(Value::Number(a + b))
             }
         },
         builtin! {
-            mul |env| (
-                eval a: Value::Number(a),
-                eval b: Value::Number(b)
+            mul |i, env| (
+                eval a: Ty::Number => Value::Number(a),
+                eval b: Ty::Number => Value::Number(b)
             ) {
                 Ok(Value::Number(a * b))
             }
         },
         builtin! {
-            println |env| (
-                eval v: v
+            println |i, env| (
+                eval v: Ty::Any => v
             ) {
                 println!("{v}");
                 Ok(atom!(unit))
             }
         },
         builtin! {
-            def |env| (
-                raw name: Expr::Ident(name),
-                eval value: value
+            def |i, env| (
+                raw name: Ty::Ident => Expr{kind: ExprKind::Ident(name), span},
+                eval value: Ty::Any => value
             ) {
                 env.set(name.clone(), value);
                 Ok(atom!(unit))
             }
         },
         builtin! {
-            lambda |env| (
-                raw raw_params: Expr::List(raw_params),
-                raw body: Expr::List(body)
+            lambda |i, env| (
+                raw raw_params: Ty::List => Expr {kind: ExprKind::List(raw_params), span},
+                raw body: Ty::Any => body
             ) {
-                let mut params = vec![];
+                let mut params = Vec::new();
+
                 for p in raw_params {
-                    let Expr::Ident(p) = p else {
-                        todo!("report wrong argument type error in lambda");
+                    let ExprKind::Ident(name) = &p.kind else {
+                        miette::bail!(
+                            "Lambda parameters must be identifiers"
+                        );
                     };
 
-                    params.push(Parameter { name: p.clone() });
+                    params.push(Parameter {
+                        name: name.clone(),
+                    });
                 }
-                Ok(Value::Function { params, body: Expr::List(body.clone()) })
+
+                Ok(Value::Function {
+                    params,
+                    body: body.clone(),
+                })
             }
         },
     ]

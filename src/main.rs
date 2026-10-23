@@ -2,6 +2,7 @@ use std::fs::read_to_string;
 
 use clap::Parser;
 use lexer::*;
+use miette::{IntoDiagnostic, Result};
 
 use crate::{env::Env, interpreter::Interpreter};
 
@@ -10,7 +11,6 @@ mod env;
 mod interpreter;
 mod lexer;
 mod parser;
-mod source;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -25,11 +25,11 @@ enum Command {
     Eval { code: String },
 }
 
-fn main() {
+fn main() -> Result<()> {
     let args = Args::parse();
 
     let (source_path, source, is_eval) = match args.command {
-        Command::Run { path } => (path.clone(), read_to_string(path).unwrap(), false),
+        Command::Run { path } => (path.clone(), read_to_string(path).into_diagnostic()?, false),
         Command::Eval { code } => ("<eval>".to_string(), code, true),
     };
 
@@ -40,13 +40,18 @@ fn main() {
     // }
     let mut parser = parser::Parser::new(lexer);
     let mut env = Env::default().clone_with(builtins::builtins());
-    let values = Interpreter::new(parser.parse().unwrap())
-        .run_program(&mut env)
-        .unwrap();
+    let values = Interpreter::new(
+        parser.parse().unwrap(),
+        parser.lexer.source,
+        parser.lexer.source_path,
+    )
+    .run_program(&mut env)?;
 
     if is_eval {
         for v in values {
             println!("{v}")
         }
     }
+
+    Ok(())
 }

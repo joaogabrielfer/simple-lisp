@@ -7,4 +7,4 @@
 
 (println ((lambda (x) (add x 1)) 10))
 (println (my-add foo 1))
-(println :foo)
+(println (add :foo 1))

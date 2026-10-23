@@ -1,35 +1,51 @@
 use std::fmt::Display;
 
-use crate::{env::Env, parser::Expr};
+use miette::{Diagnostic, NamedSource, Report, Result, SourceSpan};
+use thiserror::Error;
+
+use crate::{
+    env::Env,
+    interpreter::RuntimeErrorKind::ExpectedValue,
+    parser::{Expr, ExprKind},
+};
 
 pub struct Interpreter {
     ast: Vec<Expr>,
+    source: NamedSource<String>,
 }
 
 impl Interpreter {
-    pub fn new(ast: Vec<Expr>) -> Self {
-        Self { ast }
+    pub fn new(ast: Vec<Expr>, source: String, source_path: String) -> Self {
+        Self {
+            ast,
+            source: NamedSource::new(source_path, source),
+        }
     }
 
-    pub fn run_program(&mut self, env: &mut Env) -> Result<Vec<Value>, RuntimeError> {
+    pub fn run_program(&mut self, env: &mut Env) -> Result<Vec<Value>> {
         let mut values = vec![];
         for expr in self.ast.iter() {
-            values.push(Interpreter::run(expr, env)?)
+            values.push(self.run(expr, env)?)
         }
         Ok(values)
     }
 
-    pub fn run(expr: &Expr, env: &mut Env) -> Result<Value, RuntimeError> {
-        match expr {
-            Expr::AtomLit(a) => Ok(Value::Atom(a.clone())),
-            Expr::NumberLit(n) => Ok(Value::Number(*n)),
-            Expr::StringLit(s) => Ok(Value::String(s.clone())),
-            Expr::Ident(name) => match env.get(name.clone()) {
+    pub fn run(&self, expr: &Expr, env: &mut Env) -> Result<Value> {
+        match &expr.kind {
+            ExprKind::AtomLit(a) => Ok(Value::Atom(a.clone())),
+            ExprKind::NumberLit(n) => Ok(Value::Number(*n)),
+            ExprKind::StringLit(s) => Ok(Value::String(s.clone())),
+            ExprKind::Ident(name) => match env.get(name.clone()) {
                 Some(v) => Ok((*v).clone()),
-                None => todo!("report unknown identifier error"),
+                None => {
+                    Err(self.error(RuntimeErrorKind::UnknownIdentifier(name.clone()), expr.span))
+                }
             },
-            Expr::List(exprs) => match exprs.first() {
-                Some(Expr::Ident(name)) => {
+            ExprKind::List(exprs) => match exprs.first() {
+                Some(Expr {
+                    kind: ExprKind::Ident(name),
+                    span,
+                }) => {
                     let operands = {
                         let mut temp = exprs.clone();
                         temp.remove(0);
@@ -38,11 +54,14 @@ impl Interpreter {
                     match env.get(name.clone()) {
                         Some(Value::Function { params, body }) => {
                             if operands.len() != params.len() {
-                                todo!("report wrong argument count error")
+                                return Err(self.error(
+                                    RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                                    *span,
+                                ));
                             }
 
                             let curr_env = env.clone();
-                            Interpreter::run(
+                            self.run(
                                 body,
                                 &mut env.clone_with(
                                     params
@@ -51,9 +70,7 @@ impl Interpreter {
                                         .zip(
                                             operands
                                                 .iter()
-                                                .map(|op| {
-                                                    Interpreter::run(op, &mut curr_env.clone())
-                                                })
+                                                .map(|op| self.run(op, &mut curr_env.clone()))
                                                 .collect::<Result<Vec<_>, _>>()?,
                                         )
                                         .collect(),
@@ -62,17 +79,35 @@ impl Interpreter {
                         }
                         Some(Value::BuiltinFunction { params, body }) => {
                             if operands.len() != params.len() {
-                                todo!("report wrong argument count error")
+                                return Err(self.error(
+                                    RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                                    *span,
+                                ));
                             }
 
-                            body(env, &operands)
+                            body(self, env, &operands)
                         }
-                        _ => todo!("report expected function"),
+                        v => Err(self.error(
+                            ExpectedValue {
+                                expected: Ty::Function,
+                                got: v.map(|v| v.ty()),
+                            },
+                            *span,
+                        )),
                     }
                 }
                 Some(e) => {
-                    let Ok(Value::Function { params, body }) = Interpreter::run(e, env) else {
-                        todo!("report expected function")
+                    let (params, body) = match self.run(e, env)? {
+                        Value::Function { params, body } => (params, body),
+                        other => {
+                            return Err(self.error(
+                                RuntimeErrorKind::ExpectedValue {
+                                    expected: Ty::Function,
+                                    got: Some(other.ty()),
+                                },
+                                e.span,
+                            ));
+                        }
                     };
                     let operands = {
                         let mut temp = exprs.clone();
@@ -80,11 +115,14 @@ impl Interpreter {
                         temp
                     };
                     if operands.len() != params.len() {
-                        todo!("report wrong argument count error")
+                        return Err(self.error(
+                            RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                            e.span,
+                        ));
                     }
 
                     let curr_env = env.clone();
-                    Interpreter::run(
+                    self.run(
                         &body,
                         &mut env.clone_with(
                             params
@@ -93,21 +131,33 @@ impl Interpreter {
                                 .zip(
                                     operands
                                         .iter()
-                                        .map(|op| Interpreter::run(op, &mut curr_env.clone()))
+                                        .map(|op| self.run(op, &mut curr_env.clone()))
                                         .collect::<Result<Vec<_>, _>>()?,
                                 )
                                 .collect(),
                         ),
                     )
                 }
-                None => todo!("report expected funtcion"),
+                None => Err(self.error(
+                    RuntimeErrorKind::ExpectedValue {
+                        expected: Ty::Function,
+                        got: None,
+                    },
+                    expr.span,
+                )),
             },
         }
     }
-}
 
-#[derive(Debug)]
-pub struct RuntimeError;
+    pub fn error(&self, kind: RuntimeErrorKind, span: SourceSpan) -> Report {
+        RuntimeError {
+            src: self.source.clone(),
+            span,
+            kind,
+        }
+        .into()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum Value {
@@ -120,8 +170,19 @@ pub enum Value {
     },
     BuiltinFunction {
         params: Vec<Parameter>,
-        body: fn(&mut Env, &[Expr]) -> Result<Value, RuntimeError>,
+        body: fn(&Interpreter, &mut Env, &[Expr]) -> Result<Value>,
     },
+}
+
+impl Value {
+    pub fn ty(&self) -> Ty {
+        match self {
+            Value::Atom(_) => Ty::Atom,
+            Value::Number(_) => Ty::Number,
+            Value::String(_) => Ty::String,
+            Value::Function { .. } | Value::BuiltinFunction { .. } => Ty::Function,
+        }
+    }
 }
 
 impl Display for Value {
@@ -139,4 +200,52 @@ impl Display for Value {
 #[derive(Clone, Debug)]
 pub struct Parameter {
     pub name: String,
+}
+
+#[derive(Error, Debug, Diagnostic)]
+#[error("{kind}")]
+#[diagnostic(code(interpreter::runtime))]
+pub struct RuntimeError {
+    #[source_code]
+    pub src: NamedSource<String>,
+
+    #[label("error occurred here")]
+    pub span: SourceSpan,
+
+    pub kind: RuntimeErrorKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Ty {
+    Atom,
+    Number,
+    String,
+    Function,
+    Any,
+    List,
+    Ident,
+}
+
+impl Display for Ty {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Ty::Atom => write!(f, "Atom"),
+            Ty::Number => write!(f, "Number"),
+            Ty::String => write!(f, "String"),
+            Ty::Function => write!(f, "Function"),
+            Ty::Any => write!(f, "Any"),
+            Ty::List => write!(f, "List"),
+            Ty::Ident => write!(f, "Ident"),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeErrorKind {
+    #[error("arity mismatch: expected {0} arguments, got {1}")]
+    ArityMismatch(usize, usize),
+    #[error("unknown identifier '{0}'")]
+    UnknownIdentifier(String),
+    #[error("expected of type {expected}, got {}", .got.map_or("none".to_string(), |t| t.to_string()))]
+    ExpectedValue { expected: Ty, got: Option<Ty> },
 }
