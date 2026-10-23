@@ -1,3 +1,10 @@
 (def foo
 	 (add 2 (mul 2 3)))
-(println foo)
+
+(def my-add
+	 (lambda (a b)
+	   (add a b)))
+
+((lambda (x) (add x 1)) 10)
+
+(println (my-add foo 1))

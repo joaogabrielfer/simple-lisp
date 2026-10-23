@@ -39,6 +39,7 @@ macro_rules! builtin {
                         },
                     )*
                 ],
+                #[allow(unused_variables)]
                 body: |$env, args| {
                     let expected = 0usize $(+ {
                         let _ = stringify!($param);
@@ -108,11 +109,22 @@ pub fn builtins() -> Vec<(String, Value)> {
                 Ok(atom!(unit))
             }
         },
-        // builtin! {
-        //     lambda |env| (
-        //         raw params: Expr
-        //         )
-        // },
+        builtin! {
+            lambda |env| (
+                raw raw_params: Expr::List(raw_params),
+                raw body: Expr::List(body)
+            ) {
+                let mut params = vec![];
+                for p in raw_params {
+                    let Expr::Ident(p) = p else {
+                        todo!("report wrong argument type error in lambda");
+                    };
+
+                    params.push(Parameter { name: p.clone() });
+                }
+                Ok(Value::Function { params, body: Expr::List(body.clone()) })
+            }
+        },
     ]
     .into()
 }
