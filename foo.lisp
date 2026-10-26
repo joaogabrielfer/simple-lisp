@@ -5,6 +5,5 @@
 	 (lambda (a b)
 	   (add a b)))
 
-((lambda (x) (add x 1)) 10)
-
+(println ((lambda (x) (add x 1)) 10))
 (println (my-add foo 1))
