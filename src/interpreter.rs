@@ -41,114 +41,109 @@ impl Interpreter {
                     Err(self.error(RuntimeErrorKind::UnknownIdentifier(name.clone()), expr.span))
                 }
             },
-            ExprKind::List(exprs) => match exprs.first() {
-                Some(Expr {
-                    kind: ExprKind::Ident(name),
-                    span,
-                }) => {
-                    let operands = {
-                        let mut temp = exprs.clone();
-                        temp.remove(0);
-                        temp
-                    };
-                    match env.get(name.clone()) {
-                        Some(Value::Function { params, body }) => {
-                            if operands.len() != params.len() {
-                                return Err(self.error(
-                                    RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
-                                    *span,
-                                ));
-                            }
-
-                            let curr_env = env.clone();
-                            self.run(
-                                body,
-                                &mut env.clone_with(
-                                    params
-                                        .iter()
-                                        .map(|p| p.name.clone())
-                                        .zip(
-                                            operands
-                                                .iter()
-                                                .map(|op| self.run(op, &mut curr_env.clone()))
-                                                .collect::<Result<Vec<_>, _>>()?,
-                                        )
-                                        .collect(),
-                                ),
-                            )
-                        }
-                        Some(Value::BuiltinFunction { params, body }) => {
-                            if operands.len() != params.len() {
-                                return Err(self.error(
-                                    RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
-                                    *span,
-                                ));
-                            }
-
-                            body(self, env, &operands)
-                        }
-                        v => Err(self.error(
-                            ExpectedValue {
-                                expected: Ty::Function,
-                                got: v.map(|v| v.ty()),
-                            },
-                            *span,
-                        )),
-                    }
-                }
-                Some(e) => {
-                    let (params, body) = match self.run(e, env)? {
-                        Value::Function { params, body } => (params, body),
-                        other => {
-                            return Err(self.error(
-                                RuntimeErrorKind::ExpectedValue {
-                                    expected: Ty::Function,
-                                    got: Some(other.ty()),
-                                },
-                                e.span,
-                            ));
-                        }
-                    };
-                    let operands = {
-                        let mut temp = exprs.clone();
-                        temp.remove(0);
-                        temp
-                    };
-                    if operands.len() != params.len() {
-                        return Err(self.error(
-                            RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
-                            e.span,
-                        ));
-                    }
-
-                    let curr_env = env.clone();
-                    self.run(
-                        &body,
-                        &mut env.clone_with(
-                            params
-                                .iter()
-                                .map(|p| p.name.clone())
-                                .zip(
-                                    operands
-                                        .iter()
-                                        .map(|op| self.run(op, &mut curr_env.clone()))
-                                        .collect::<Result<Vec<_>, _>>()?,
-                                )
-                                .collect(),
-                        ),
-                    )
-                }
-                None => Err(self.error(
-                    RuntimeErrorKind::ExpectedValue {
-                        expected: Ty::Function,
-                        got: None,
-                    },
-                    expr.span,
-                )),
-            },
+            ExprKind::List(exprs) => self.run_list(exprs, expr, env),
         }
     }
 
+    fn run_list(&self, exprs: &[Expr], expr: &Expr, env: &mut Env) -> Result<Value> {
+        match exprs.first() {
+            Some(Expr {
+                kind: ExprKind::Ident(name),
+                span,
+            }) => {
+                let operands = &exprs[1..];
+                match env.get(name.clone()) {
+                    Some(Value::Function { params, body }) => {
+                        if operands.len() != params.len() {
+                            return Err(self.error(
+                                RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                                *span,
+                            ));
+                        }
+
+                        let curr_env = env.clone();
+                        self.run(
+                            body,
+                            &mut env.clone_with(
+                                params
+                                    .iter()
+                                    .map(|p| p.name.clone())
+                                    .zip(
+                                        operands
+                                            .iter()
+                                            .map(|op| self.run(op, &mut curr_env.clone()))
+                                            .collect::<Result<Vec<_>, _>>()?,
+                                    )
+                                    .collect(),
+                            ),
+                        )
+                    }
+                    Some(Value::BuiltinFunction { params, body }) => {
+                        if operands.len() != params.len() {
+                            return Err(self.error(
+                                RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                                *span,
+                            ));
+                        }
+
+                        body(self, env, operands)
+                    }
+                    v => Err(self.error(
+                        ExpectedValue {
+                            expected: Ty::Function,
+                            got: v.map(|v| v.ty()),
+                        },
+                        *span,
+                    )),
+                }
+            }
+            Some(e) => {
+                let (params, body) = match self.run(e, env)? {
+                    Value::Function { params, body } => (params, body),
+                    other => {
+                        return Err(self.error(
+                            RuntimeErrorKind::ExpectedValue {
+                                expected: Ty::Function,
+                                got: Some(other.ty()),
+                            },
+                            e.span,
+                        ));
+                    }
+                };
+                let operands = &exprs[1..];
+                if operands.len() != params.len() {
+                    return Err(self.error(
+                        RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
+                        e.span,
+                    ));
+                }
+
+                let curr_env = env.clone();
+                self.run(
+                    &body,
+                    &mut env.clone_with(
+                        params
+                            .iter()
+                            .map(|p| p.name.clone())
+                            .zip(
+                                operands
+                                    .iter()
+                                    .map(|op| self.run(op, &mut curr_env.clone()))
+                                    .collect::<Result<Vec<_>, _>>()?,
+                            )
+                            .collect(),
+                    ),
+                )
+            }
+            None => Err(self.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: Ty::Function,
+                    got: None,
+                },
+                expr.span,
+            )),
+        }
+    }
     pub fn error(&self, kind: RuntimeErrorKind, span: SourceSpan) -> Report {
         RuntimeError {
             src: self.source.clone(),

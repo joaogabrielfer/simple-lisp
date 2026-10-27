@@ -6,10 +6,6 @@ use crate::interpreter::Value;
 pub struct Env(HashMap<String, Value>);
 
 impl Env {
-    pub fn contains(&self, name: String) -> bool {
-        self.0.contains_key(&name)
-    }
-
     pub fn get(&self, name: String) -> Option<&Value> {
         self.0.get(&name)
     }

@@ -1,7 +1,4 @@
-use std::{
-    fs::read_to_string,
-    io::{Write, stdin, stdout},
-};
+use std::fs::read_to_string;
 
 use clap::Parser;
 use colored::Colorize;
