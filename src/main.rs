@@ -4,8 +4,10 @@ use std::{
 };
 
 use clap::Parser;
+use colored::Colorize;
 use lexer::*;
 use miette::{IntoDiagnostic, Result};
+use rustyline::{DefaultEditor, error::ReadlineError};
 
 use crate::{env::Env, interpreter::Interpreter};
 
@@ -37,18 +39,34 @@ fn main() -> Result<()> {
         Command::Eval { code } => ("<eval>".to_string(), code, true),
         Command::Repl => {
             let mut env = Env::default().clone_with(builtins::builtins());
+            let mut rl = DefaultEditor::new().unwrap();
+
             loop {
-                print!("> ");
-                stdout().flush().unwrap();
-                let mut buffer = String::new();
-                stdin().read_line(&mut buffer).unwrap();
-                let lexer = Lexer::new("<repl>".to_string(), buffer);
-                let mut parser = parser::Parser::new(lexer);
-                let values = Interpreter::new(parser.parse().unwrap())
-                    .run_program(&mut env)
-                    .unwrap();
-                for v in values {
-                    println!("{v}")
+                match rl.readline(&format!("{} ", "λ> ".blue())) {
+                    Ok(line) => {
+                        rl.add_history_entry(line.as_str()).unwrap();
+                        let lexer = Lexer::new("<repl>".to_string(), line);
+                        let mut parser = parser::Parser::new(lexer);
+                        match parser.parse().and_then(|ast| {
+                            Interpreter::new(ast, parser.lexer.source, parser.lexer.source_path)
+                                .run_program(&mut env)
+                        }) {
+                            Ok(values) => {
+                                for v in values {
+                                    println!("{v}")
+                                }
+                            }
+                            Err(e) => eprintln!("{} {e}", "ERROR:".red()),
+                        }
+                    }
+                    Err(ReadlineError::Interrupted) => (),
+                    Err(ReadlineError::Eof) => {
+                        println!("exiting...");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        eprintln!("{} {e}", "ERROR:".red())
+                    }
                 }
             }
         }
