@@ -22,13 +22,11 @@ impl Env {
         env
     }
 
-    // this gives priority to the `self` env
+    // this gives priority to the `other` env
     pub fn join(&self, other: &Env) -> Self {
         let mut env = self.clone();
         for (key, value) in other.0.iter() {
-            if !env.0.contains_key(key) {
-                env.set(key.clone(), value.clone());
-            }
+            env.set(key.clone(), value.clone());
         }
         env
     }
