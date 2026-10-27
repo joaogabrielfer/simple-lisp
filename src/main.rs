@@ -13,6 +13,7 @@ mod env;
 mod interpreter;
 mod lexer;
 mod parser;
+mod values;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

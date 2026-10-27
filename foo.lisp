@@ -9,15 +9,3 @@
 (println (add-five 10)) ; 15
 
 (println (prod :foo 10)) ; (:foo, 10)
-
-(def x 10)
-
-(def foo
-  (lambda (y)
-    (add x y)))
-
-(def bar
-  (lambda (x)
-    (foo 5)))
-
-(println (bar 100))

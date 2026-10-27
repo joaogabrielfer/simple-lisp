@@ -1,11 +1,7 @@
-use crate::interpreter::RuntimeErrorKind;
-use crate::interpreter::Ty;
 use crate::{
-    interpreter::{
-        Parameter,
-        Value::{self},
-    },
+    interpreter::RuntimeErrorKind,
     parser::{Expr, ExprKind},
+    values::{Parameter, Ty, Value},
 };
 
 macro_rules! bind_arg {
