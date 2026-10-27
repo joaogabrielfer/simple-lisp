@@ -124,6 +124,17 @@ impl Lexer {
 
                 Ok(self.token(TokenKind::Atom, buffer, start))
             }
+            Some(';') => {
+                while self
+                    .source
+                    .chars()
+                    .nth(self.index)
+                    .is_none_or(|c| !matches!(c, '\n'))
+                {
+                    self.index += 1;
+                }
+                self.next_token()
+            }
             Some(c) if c.is_whitespace() => {
                 self.index += 1;
                 self.next_token()

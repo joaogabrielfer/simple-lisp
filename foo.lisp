@@ -1,10 +1,9 @@
-(def foo
-	 (add 2 (mul 2 3)))
+; this is a comment
+(def make-adder
+  (lambda (x)
+    (lambda (y)
+      (add x y))))
 
-(def my-add
-	 (lambda (a b)
-	   (add a b)))
+(def add-five (make-adder 5))
 
-(println ((lambda (x) (add x 1)) 10))
-(println (my-add foo 1))
-(println (add :foo 1))
+(add-five 10) ; 15
