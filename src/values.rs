@@ -1,4 +1,8 @@
-use crate::{Env, Interpreter, parser::Expr};
+use crate::{
+    Env, Interpreter,
+    parser::Expr,
+    pattern::{Literal, Pattern},
+};
 use miette::Result;
 use std::fmt::Display;
 
@@ -8,12 +12,12 @@ pub enum Value {
     Number(i32),
     String(String),
     Function {
-        params: Vec<Parameter>,
+        params: Vec<Pattern>,
         body: Expr,
         env: Env,
     },
     BuiltinFunction {
-        params: Vec<Parameter>,
+        params: Vec<Pattern>,
         body: fn(&Interpreter, &mut Env, &[Expr]) -> Result<Value>,
     },
     Product(Box<Value>, Box<Value>),
@@ -44,9 +48,14 @@ impl Display for Value {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Parameter {
-    pub name: String,
+impl From<Literal> for Value {
+    fn from(lit: Literal) -> Self {
+        match lit {
+            Literal::Atom(a) => Value::Atom(a),
+            Literal::Number(n) => Value::Number(n),
+            Literal::String(s) => Value::String(s),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -57,7 +66,6 @@ pub enum Ty {
     Function,
     Any,
     List,
-    Ident,
     Prod(Box<Ty>, Box<Ty>),
 }
 
@@ -70,7 +78,6 @@ impl Display for Ty {
             Ty::Function => write!(f, "Function"),
             Ty::Any => write!(f, "Any"),
             Ty::List => write!(f, "List"),
-            Ty::Ident => write!(f, "Ident"),
             Ty::Prod(a, b) => write!(f, "Prod({a}, {b})"),
         }
     }

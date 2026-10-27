@@ -1,3 +1,4 @@
+use crate::pattern::Pattern;
 use crate::values::Ty;
 use crate::values::Value;
 
@@ -66,21 +67,13 @@ impl Interpreter {
                             ));
                         }
 
-                        let curr_env = env.clone();
                         self.run(
                             body,
-                            &mut env.join(fn_env).clone_with(
-                                params
-                                    .iter()
-                                    .map(|p| p.name.clone())
-                                    .zip(
-                                        operands
-                                            .iter()
-                                            .map(|op| self.run(op, &mut curr_env.clone()))
-                                            .collect::<Result<Vec<_>, _>>()?,
-                                    )
-                                    .collect(),
-                            ),
+                            &mut env.clone().join(fn_env).resolve_params(
+                                self,
+                                params.clone(),
+                                operands,
+                            )?,
                         )
                     }
                     Some(Value::BuiltinFunction { params, body }) => {
@@ -127,21 +120,12 @@ impl Interpreter {
                     ));
                 }
 
-                let curr_env = env.clone();
                 self.run(
                     &body,
-                    &mut env.join(&fn_env).clone_with(
-                        params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .zip(
-                                operands
-                                    .iter()
-                                    .map(|op| self.run(op, &mut curr_env.clone()))
-                                    .collect::<Result<Vec<_>, _>>()?,
-                            )
-                            .collect(),
-                    ),
+                    &mut env
+                        .clone()
+                        .join(&fn_env)
+                        .resolve_params(self, params, operands)?,
                 )
             }
             None => Err(self.error(
@@ -184,4 +168,6 @@ pub enum RuntimeErrorKind {
     UnknownIdentifier(String),
     #[error("expected of type {expected}, got {}", .got.clone().map_or("none".to_string(), |t| t.to_string()))]
     ExpectedValue { expected: Ty, got: Option<Ty> },
+    #[error("value `{got}` cannot match with pattern `{expected}`")]
+    MismatchedPattern { expected: Pattern, got: Value },
 }

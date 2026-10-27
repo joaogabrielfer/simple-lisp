@@ -1,4 +1,11 @@
-use crate::values::Value;
+use miette::Result;
+
+use crate::{
+    interpreter::{Interpreter, RuntimeErrorKind},
+    parser::Expr,
+    pattern::{Bindings, Pattern},
+    values::Value,
+};
 use std::collections::HashMap;
 
 #[derive(Default, Clone, Debug)]
@@ -28,5 +35,35 @@ impl Env {
             env.set(key.clone(), value.clone());
         }
         env
+    }
+
+    pub fn resolve_params(
+        self,
+        interpreter: &Interpreter,
+        params: Vec<Pattern>,
+        operands: &[Expr],
+    ) -> Result<Env> {
+        let mut env = self;
+        let mut bindings = HashMap::new();
+        for (param, expr) in params.into_iter().zip(operands) {
+            let span = expr.span;
+            let value = interpreter.run(expr, &mut env)?;
+            let Some(binding) = param.match_value(value.clone()) else {
+                return Err(interpreter.error(
+                    RuntimeErrorKind::MismatchedPattern {
+                        expected: param,
+                        got: value,
+                    },
+                    span,
+                ));
+            };
+            bindings.extend(binding);
+        }
+        env.0.extend(bindings);
+        Ok(env)
+    }
+
+    pub fn bind(&mut self, binds: Bindings) {
+        self.0.extend(binds);
     }
 }

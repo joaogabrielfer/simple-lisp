@@ -1,7 +1,8 @@
 use crate::{
     interpreter::RuntimeErrorKind,
     parser::{Expr, ExprKind},
-    values::{Parameter, Ty, Value},
+    pattern::{Literal, Pattern},
+    values::{Ty, Value},
 };
 
 macro_rules! bind_arg {
@@ -42,7 +43,7 @@ macro_rules! builtin {
     (
         $name:ident |$i:ident, $env:ident| (
             $(
-                $mode:ident $param:ident : $expected:expr => $pat:pat
+                $mode:ident $param:expr => $expected:expr => $pat:pat
             ),* $(,)?
         ) $body:block
     ) => {
@@ -51,9 +52,7 @@ macro_rules! builtin {
             Value::BuiltinFunction {
                 params: vec![
                     $(
-                        Parameter {
-                            name: stringify!($param).to_string(),
-                        },
+                        $param,
                     )*
                 ],
 
@@ -102,23 +101,23 @@ pub fn builtins() -> Vec<(String, Value)> {
     [
         builtin! {
             add |i, env| (
-                eval a: Ty::Number => Value::Number(a),
-                eval b: Ty::Number => Value::Number(b)
+                eval Pattern::Bind("a".to_string()) => Ty::Number => Value::Number(a),
+                eval Pattern::Bind("b".to_string()) => Ty::Number => Value::Number(b)
             ) {
                 Ok(Value::Number(a + b))
             }
         },
         builtin! {
             mul |i, env| (
-                eval a: Ty::Number => Value::Number(a),
-                eval b: Ty::Number => Value::Number(b)
+                eval Pattern::Bind("a".to_string()) => Ty::Number => Value::Number(a),
+                eval Pattern::Bind("b".to_string()) => Ty::Number => Value::Number(b)
             ) {
                 Ok(Value::Number(a * b))
             }
         },
         builtin! {
             println |i, env| (
-                eval v: Ty::Any => v
+                eval Pattern::Bind("v".to_string()) => Ty::Any => v
             ) {
                 println!("{v}");
                 Ok(atom!(unit))
@@ -126,30 +125,34 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             def |i, env| (
-                raw name: Ty::Ident => Expr{kind: ExprKind::Ident(name), span},
-                eval value: Ty::Any => value
+                raw Pattern::Bind("name".to_string()) => Ty::Any => e,
+                eval Pattern::Bind("value".to_string()) => Ty::Any => value
             ) {
-                env.set(name.clone(), value);
+                let pat: Pattern = e.try_into()?;
+                match pat.match_value(value) {
+                    Some(binds) => env.bind(binds),
+                    None => todo!()
+                }
                 Ok(atom!(unit))
             }
         },
         builtin! {
             lambda |i, env| (
-                raw raw_params: Ty::List => Expr {kind: ExprKind::List(raw_params), span},
-                raw body: Ty::Any => body
+                raw Pattern::Bind("raw_params".to_string()) => Ty::List => Expr {kind: ExprKind::List(raw_params), span},
+                raw Pattern::Bind("body".to_string()) => Ty::Any => body
             ) {
                 let mut params = Vec::new();
 
                 for p in raw_params {
-                    let ExprKind::Ident(name) = &p.kind else {
-                        miette::bail!(
-                            "Lambda parameters must be identifiers"
-                        );
+                    let pat = match p.kind.clone() {
+                        ExprKind::AtomLit(a) => Pattern::Literal(Literal::Atom(a)),
+                        ExprKind::NumberLit(n) => Pattern::Literal(Literal::Number(n)),
+                        ExprKind::StringLit(s) => Pattern::Literal(Literal::String(s)),
+                        ExprKind::Ident(i) => Pattern::Bind(i),
+                        ExprKind::List(exprs) => miette::bail!("list cannot be parameters as of now"),
                     };
 
-                    params.push(Parameter {
-                        name: name.clone(),
-                    });
+                    params.push(pat)
                 }
 
                 Ok(Value::Function {
@@ -161,8 +164,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             prod |i, env| (
-                eval a: Ty::Any => a,
-                eval b: Ty::Any => b,
+                eval Pattern::Bind("a".to_string()) => Ty::Any => a,
+                eval Pattern::Bind("b".to_string()) => Ty::Any => b,
                 ) {
 
                 Ok(Value::Product(Box::new(a), Box::new(b)))

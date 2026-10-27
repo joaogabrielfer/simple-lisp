@@ -13,6 +13,7 @@ mod env;
 mod interpreter;
 mod lexer;
 mod parser;
+mod pattern;
 mod values;
 
 #[derive(Parser, Debug)]
