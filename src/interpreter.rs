@@ -176,6 +176,7 @@ pub enum Value {
         params: Vec<Parameter>,
         body: fn(&Interpreter, &mut Env, &[Expr]) -> Result<Value>,
     },
+    Product(Box<Value>, Box<Value>),
 }
 
 impl Value {
@@ -185,6 +186,7 @@ impl Value {
             Value::Number(_) => Ty::Number,
             Value::String(_) => Ty::String,
             Value::Function { .. } | Value::BuiltinFunction { .. } => Ty::Function,
+            Value::Product(a, b) => Ty::Prod(Box::new(a.ty()), Box::new(b.ty())),
         }
     }
 }
@@ -196,7 +198,8 @@ impl Display for Value {
             Value::Number(n) => write!(f, "{n}"),
             Value::String(s) => write!(f, "{s}"),
             Value::Function { .. } => write!(f, "<function>"),
-            Value::BuiltinFunction { .. } => write!(f, "function"),
+            Value::BuiltinFunction { .. } => write!(f, "<function>"),
+            Value::Product(a, b) => write!(f, "({a}, {b})"),
         }
     }
 }
@@ -219,7 +222,7 @@ pub struct RuntimeError {
     pub kind: RuntimeErrorKind,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum Ty {
     Atom,
     Number,
@@ -228,6 +231,7 @@ pub enum Ty {
     Any,
     List,
     Ident,
+    Prod(Box<Ty>, Box<Ty>),
 }
 
 impl Display for Ty {
@@ -240,6 +244,7 @@ impl Display for Ty {
             Ty::Any => write!(f, "Any"),
             Ty::List => write!(f, "List"),
             Ty::Ident => write!(f, "Ident"),
+            Ty::Prod(a, b) => write!(f, "Prod({a}, {b})"),
         }
     }
 }
@@ -250,6 +255,6 @@ pub enum RuntimeErrorKind {
     ArityMismatch(usize, usize),
     #[error("unknown identifier '{0}'")]
     UnknownIdentifier(String),
-    #[error("expected of type {expected}, got {}", .got.map_or("none".to_string(), |t| t.to_string()))]
+    #[error("expected of type {expected}, got {}", .got.clone().map_or("none".to_string(), |t| t.to_string()))]
     ExpectedValue { expected: Ty, got: Option<Ty> },
 }

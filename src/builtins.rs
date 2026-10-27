@@ -163,6 +163,15 @@ pub fn builtins() -> Vec<(String, Value)> {
                 })
             }
         },
+        builtin! {
+            prod |i, env| (
+                eval a: Ty::Any => a,
+                eval b: Ty::Any => b,
+                ) {
+
+                Ok(Value::Product(Box::new(a), Box::new(b)))
+            }
+        },
     ]
     .into()
 }
