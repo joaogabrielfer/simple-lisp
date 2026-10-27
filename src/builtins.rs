@@ -159,6 +159,7 @@ pub fn builtins() -> Vec<(String, Value)> {
                 Ok(Value::Function {
                     params,
                     body: body.clone(),
+                    env: env.clone()
                 })
             }
         },

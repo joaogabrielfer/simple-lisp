@@ -6,4 +6,4 @@
 
 (def add-five (make-adder 5))
 
-(add-five 10) ; 15
+(println (add-five 10)) ; 15

@@ -53,7 +53,11 @@ impl Interpreter {
             }) => {
                 let operands = &exprs[1..];
                 match env.get(name.clone()) {
-                    Some(Value::Function { params, body }) => {
+                    Some(Value::Function {
+                        params,
+                        body,
+                        env: fn_env,
+                    }) => {
                         if operands.len() != params.len() {
                             return Err(self.error(
                                 RuntimeErrorKind::ArityMismatch(params.len(), operands.len()),
@@ -64,7 +68,7 @@ impl Interpreter {
                         let curr_env = env.clone();
                         self.run(
                             body,
-                            &mut env.clone_with(
+                            &mut env.join(fn_env).clone_with(
                                 params
                                     .iter()
                                     .map(|p| p.name.clone())
@@ -98,8 +102,12 @@ impl Interpreter {
                 }
             }
             Some(e) => {
-                let (params, body) = match self.run(e, env)? {
-                    Value::Function { params, body } => (params, body),
+                let (params, body, fn_env) = match self.run(e, env)? {
+                    Value::Function {
+                        params,
+                        body,
+                        env: fn_env,
+                    } => (params, body, fn_env),
                     other => {
                         return Err(self.error(
                             RuntimeErrorKind::ExpectedValue {
@@ -121,7 +129,7 @@ impl Interpreter {
                 let curr_env = env.clone();
                 self.run(
                     &body,
-                    &mut env.clone_with(
+                    &mut env.join(&fn_env).clone_with(
                         params
                             .iter()
                             .map(|p| p.name.clone())
@@ -162,6 +170,7 @@ pub enum Value {
     Function {
         params: Vec<Parameter>,
         body: Expr,
+        env: Env,
     },
     BuiltinFunction {
         params: Vec<Parameter>,

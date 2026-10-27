@@ -39,7 +39,7 @@ fn main() -> Result<()> {
             let mut rl = DefaultEditor::new().unwrap();
 
             loop {
-                match rl.readline(&format!("{} ", "λ> ".blue())) {
+                match rl.readline(&format!("{} ", "λ>".blue())) {
                     Ok(line) => {
                         rl.add_history_entry(line.as_str()).unwrap();
                         let lexer = Lexer::new("<repl>".to_string(), line);
