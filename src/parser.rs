@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use miette::{Diagnostic, NamedSource, Report, Result, SourceOffset, SourceSpan};
 use thiserror::Error;
 
@@ -22,6 +24,28 @@ pub enum ExprKind {
     StringLit(String),
     Ident(String),
     List(Vec<Expr>),
+}
+
+impl Display for ExprKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprKind::AtomLit(a) => write!(f, "atom literal {a}"),
+            ExprKind::NumberLit(n) => write!(f, "number literal {n}"),
+            ExprKind::StringLit(s) => write!(f, "string literal {s}"),
+            ExprKind::Ident(i) => write!(f, "identifier \"{i}\""),
+            ExprKind::List(exprs) => {
+                write!(
+                    f,
+                    "({})",
+                    exprs
+                        .iter()
+                        .map(|e| e.kind.to_string())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                )
+            }
+        }
+    }
 }
 
 pub struct Parser {

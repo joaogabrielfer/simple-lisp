@@ -9,6 +9,6 @@
 ; (println (add-five 10)) ; 15
 
 (def xy (prod :foo 10)) ; (:foo, 10)
-(def (prod x y) xy)
-(println x)
-(println y)
+(case xy (
+		  ((prod a b) (println b))
+		  ))

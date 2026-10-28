@@ -72,7 +72,8 @@ impl TryFrom<&Expr> for Pattern {
                         ))
                     }
                 }
-                _ => todo!(),
+                Some((ExprKind::Ident(i), [])) => Ok(Pattern::Bind(i)),
+                _ => todo!("invalid pattern"),
             },
         }
     }

@@ -149,7 +149,9 @@ pub fn builtins() -> Vec<(String, Value)> {
                         ExprKind::NumberLit(n) => Pattern::Literal(Literal::Number(n)),
                         ExprKind::StringLit(s) => Pattern::Literal(Literal::String(s)),
                         ExprKind::Ident(i) => Pattern::Bind(i),
-                        ExprKind::List(exprs) => miette::bail!("list cannot be parameters as of now"),
+                        ExprKind::List(exprs) => {
+                            miette::bail!("list cannot be parameters as of now");
+                        }
                     };
 
                     params.push(pat)
@@ -171,6 +173,38 @@ pub fn builtins() -> Vec<(String, Value)> {
                 Ok(Value::Product(Box::new(a), Box::new(b)))
             }
         },
+        builtin! {
+            case |i, env| (
+                eval Pattern::Bind("pattern".to_string()) => Ty::Any => value,
+                raw Pattern::Bind("branches".to_string()) => Ty::List => Expr { kind: ExprKind::List(list), span }
+                ) {
+
+                for expr in list {
+                    if let ExprKind::List(ref inner) = expr.kind {
+                        let case: Pattern = if let Some(e) = inner.first() {
+                            e.try_into()?
+                        } else {
+                            todo!()
+                        };
+
+                        if let Some(bindings) = case.match_value(value.clone()) {
+                            if let Some(e) = inner.get(1) {
+                                let mut env = env.clone();
+                                env.bind(bindings);
+                                return i.run(e, &mut env);
+                            } else {
+                                todo!("expected 2 expressions in list")
+                            }
+                        }
+                    } else {
+                        return Err(i.error(RuntimeErrorKind::ExpectedExpression { expected: Ty::List, got: Some(expr.kind.clone()) }, *span))
+                    }
+                }
+
+
+                Err(i.error(RuntimeErrorKind::UnexhaustivePatternMatch, *span))
+            }
+        }
     ]
     .into()
 }

@@ -166,8 +166,12 @@ pub enum RuntimeErrorKind {
     ArityMismatch(usize, usize),
     #[error("unknown identifier '{0}'")]
     UnknownIdentifier(String),
-    #[error("expected of type {expected}, got {}", .got.clone().map_or("none".to_string(), |t| t.to_string()))]
+    #[error("expected value of type {expected}, got {}", .got.clone().map_or("none".to_string(), |t| t.to_string()))]
     ExpectedValue { expected: Ty, got: Option<Ty> },
+    #[error("expected expression {expected}, got got {}", .got.clone().map_or("none".to_string(), |t| t.to_string()))]
+    ExpectedExpression { expected: Ty, got: Option<ExprKind> },
     #[error("value `{got}` cannot match with pattern `{expected}`")]
     MismatchedPattern { expected: Pattern, got: Value },
+    #[error("pattern match is not exhaustive")]
+    UnexhaustivePatternMatch,
 }
