@@ -175,29 +175,25 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             case |i, env| (
-                eval pattern: Any => value,
+                eval value: Any => value,
                 raw branches: List => Expr { kind: ExprKind::List(list), span }
                 ) {
 
                 for expr in list {
-                    if let ExprKind::List(ref inner) = expr.kind {
-                        let case: Pattern = if let Some(e) = inner.first() {
-                            e.try_into()?
-                        } else {
-                            todo!()
-                        };
-
-                        if let Some(bindings) = case.match_value(value.clone()) {
-                            if let Some(e) = inner.get(1) {
-                                let mut env = env.clone();
-                                env.bind(bindings);
-                                return i.run(e, &mut env);
-                            } else {
-                                todo!("expected 2 expressions in list")
-                            }
-                        }
-                    } else {
+                    let ExprKind::List(ref inner) = expr.kind else {
                         return Err(i.error(RuntimeErrorKind::ExpectedExpression { expected: Ty::List, got: Some(expr.kind.clone()) }, *span))
+                    };
+
+                    let [ref pattern, ref body] = inner[..] else {
+                        todo!("expected 2 expressions in list")
+                    };
+
+                    let pattern: Pattern = pattern.try_into()?;
+
+                    if let Some(bindings) = pattern.match_value(value.clone()) {
+                        let mut env = env.clone();
+                        env.bind(bindings);
+                        return i.run(body, &mut env)
                     }
                 }
 
