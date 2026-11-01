@@ -11,6 +11,7 @@ pub enum Value {
     Atom(String),
     Number(i32),
     String(String),
+    List(Vec<Value>),
     Function {
         params: Vec<Pattern>,
         body: Expr,
@@ -29,6 +30,7 @@ impl Value {
             Value::Atom(_) => Ty::Atom,
             Value::Number(_) => Ty::Number,
             Value::String(_) => Ty::String,
+            Value::List(_) => Ty::List,
             Value::Function { .. } | Value::BuiltinFunction { .. } => Ty::Function,
             Value::Product(a, b) => Ty::Prod(Box::new(a.ty()), Box::new(b.ty())),
         }
@@ -44,6 +46,14 @@ impl Display for Value {
             Value::Function { .. } => write!(f, "<function>"),
             Value::BuiltinFunction { .. } => write!(f, "<function>"),
             Value::Product(a, b) => write!(f, "({a}, {b})"),
+            Value::List(l) => write!(
+                f,
+                "({})",
+                l.iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
         }
     }
 }
