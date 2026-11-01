@@ -43,7 +43,7 @@ macro_rules! builtin {
     (
         $name:ident |$i:ident, $env:ident| (
             $(
-                $mode:ident $param:expr => $expected:expr => $pat:pat
+                $mode:ident $param:ident: $ty:ident => $pat:pat
             ),* $(,)?
         ) $body:block
     ) => {
@@ -52,7 +52,7 @@ macro_rules! builtin {
             Value::BuiltinFunction {
                 params: vec![
                     $(
-                        $param,
+                        Pattern::Typed(Box::new(Pattern::Bind(stringify!(param).to_string())), Ty::$ty),
                     )*
                 ],
 
@@ -79,7 +79,7 @@ macro_rules! builtin {
                             $env,
                             iter.next().unwrap(),
                             $mode,
-                            $expected,
+                            Ty::$ty,
                             $pat
                         );
                     )*
@@ -101,23 +101,23 @@ pub fn builtins() -> Vec<(String, Value)> {
     [
         builtin! {
             add |i, env| (
-                eval Pattern::Bind("a".to_string()) => Ty::Number => Value::Number(a),
-                eval Pattern::Bind("b".to_string()) => Ty::Number => Value::Number(b)
+                eval a: Number => Value::Number(a),
+                eval b: Number => Value::Number(b),
             ) {
                 Ok(Value::Number(a + b))
             }
         },
         builtin! {
             mul |i, env| (
-                eval Pattern::Bind("a".to_string()) => Ty::Number => Value::Number(a),
-                eval Pattern::Bind("b".to_string()) => Ty::Number => Value::Number(b)
+                eval a: Number => Value::Number(a),
+                eval b: Number => Value::Number(b),
             ) {
                 Ok(Value::Number(a * b))
             }
         },
         builtin! {
             println |i, env| (
-                eval Pattern::Bind("v".to_string()) => Ty::Any => v
+                eval v: Any => v
             ) {
                 println!("{v}");
                 Ok(atom!(unit))
@@ -125,8 +125,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             def |i, env| (
-                raw Pattern::Bind("name".to_string()) => Ty::Any => e,
-                eval Pattern::Bind("value".to_string()) => Ty::Any => value
+                raw name: Any => e,
+                eval value: Any => value
             ) {
                 let pat: Pattern = e.try_into()?;
                 match pat.match_value(value) {
@@ -138,8 +138,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             lambda |i, env| (
-                raw Pattern::Bind("raw_params".to_string()) => Ty::List => Expr {kind: ExprKind::List(raw_params), span},
-                raw Pattern::Bind("body".to_string()) => Ty::Any => body
+                raw raw_params: List => Expr {kind: ExprKind::List(raw_params), span},
+                raw body: Any => body
             ) {
                 let mut params = Vec::new();
 
@@ -166,8 +166,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             prod |i, env| (
-                eval Pattern::Bind("a".to_string()) => Ty::Any => a,
-                eval Pattern::Bind("b".to_string()) => Ty::Any => b,
+                eval a: Any => a,
+                eval b: Any => b,
                 ) {
 
                 Ok(Value::Product(Box::new(a), Box::new(b)))
@@ -175,8 +175,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             case |i, env| (
-                eval Pattern::Bind("pattern".to_string()) => Ty::Any => value,
-                raw Pattern::Bind("branches".to_string()) => Ty::List => Expr { kind: ExprKind::List(list), span }
+                eval pattern: Any => value,
+                raw branches: List => Expr { kind: ExprKind::List(list), span }
                 ) {
 
                 for expr in list {

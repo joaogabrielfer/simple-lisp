@@ -58,7 +58,7 @@ impl From<Literal> for Value {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ty {
     Atom,
     Number,

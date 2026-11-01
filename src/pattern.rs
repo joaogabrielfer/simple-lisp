@@ -4,7 +4,7 @@ use miette::Report;
 
 use crate::{
     parser::{Expr, ExprKind},
-    values::Value,
+    values::{Ty, Value},
 };
 
 #[derive(Clone, Debug)]
@@ -13,6 +13,7 @@ pub enum Pattern {
     Wildcard,
     Literal(Literal),
     Product(Box<Pattern>, Box<Pattern>),
+    Typed(Box<Pattern>, Ty),
 }
 
 impl Pattern {
@@ -33,6 +34,7 @@ impl Pattern {
                 m1.extend(m2);
                 Some(m1)
             }
+            (Pattern::Typed(pat, ty), v) if v.ty() == *ty => pat.match_value(v),
             _ => None,
         }
     }
@@ -45,6 +47,7 @@ impl Display for Pattern {
             Pattern::Wildcard => write!(f, "_"),
             Pattern::Literal(literal) => write!(f, "{literal}"),
             Pattern::Product(p1, p2) => write!(f, "({p1}, {p2})"),
+            Pattern::Typed(pat, ty) => write!(f, "({pat}: {ty})"),
         }
     }
 }
