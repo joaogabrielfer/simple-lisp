@@ -14,6 +14,7 @@ pub enum Pattern {
     Literal(Literal),
     Product(Box<Pattern>, Box<Pattern>),
     Typed(Box<Pattern>, Ty),
+    List(Vec<Pattern>),
 }
 
 impl Pattern {
@@ -35,6 +36,18 @@ impl Pattern {
                 Some(m1)
             }
             (Pattern::Typed(pat, ty), v) if v.ty() == *ty => pat.match_value(v),
+            (Pattern::List(pats), Value::List(vals)) => pats
+                .iter()
+                .zip(vals)
+                .map(|(p, v)| p.match_value(v))
+                .reduce(|mut bindings, curr| {
+                    if let Some(b) = curr
+                        && let Some(ref mut bindings) = bindings
+                    {
+                        bindings.extend(b);
+                    }
+                    bindings
+                })?,
             _ => None,
         }
     }
@@ -48,6 +61,14 @@ impl Display for Pattern {
             Pattern::Literal(literal) => write!(f, "{literal}"),
             Pattern::Product(p1, p2) => write!(f, "({p1}, {p2})"),
             Pattern::Typed(pat, ty) => write!(f, "({pat}: {ty})"),
+            Pattern::List(l) => write!(
+                f,
+                "({})",
+                l.iter()
+                    .map(|p| p.to_string())
+                    .collect::<Vec<String>>()
+                    .join(" ")
+            ),
         }
     }
 }

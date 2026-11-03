@@ -5,8 +5,8 @@ use crate::{
     values::{Ty, Value},
 };
 
-macro_rules! bind_arg {
-    ($i:expr, $env:expr, $expr:expr, raw, $expected:expr, $pat:pat) => {
+macro_rules! bind_arg_raw {
+    ($i:expr, $env:expr, $expr:expr, $expected:expr, $pat:pat) => {
         let expr = $expr;
 
         #[allow(irrefutable_let_patterns)]
@@ -20,17 +20,25 @@ macro_rules! bind_arg {
             ));
         };
     };
+}
 
-    ($i:expr, $env:expr, $expr:expr, eval, $expected:expr, $pat:pat) => {
+macro_rules! bind_eval_arg {
+    ($i:expr, $env:expr, $expr:expr, Any, $param:ident) => {
         let expr = $expr;
         let value = $i.run(expr, $env)?;
         let got = value.ty();
 
-        #[allow(irrefutable_let_patterns)]
-        let $pat = value else {
+        let $param = value;
+    };
+    ($i:expr, $env:expr, $expr:expr, $expected:ident, $param:ident) => {
+        let expr = $expr;
+        let value = $i.run(expr, $env)?;
+        let got = value.ty();
+
+        let Value::$expected($param) = value else {
             return Err($i.error(
                 RuntimeErrorKind::ExpectedValue {
-                    expected: $expected,
+                    expected: Ty::$expected,
                     got: Some(got),
                 },
                 expr.span,
@@ -40,10 +48,97 @@ macro_rules! bind_arg {
 }
 
 macro_rules! builtin {
+    // ---- RAW arguments ----
+
+    // No pattern: use the parameter name
+    (@arg $i:ident, $env:ident, $expr:expr,
+        raw $param:ident: $ty:ident
+    ) => {
+        builtin!(@arg $i, $env, $expr,
+            raw $param: $ty => $param);
+    };
+
+    // Explicit pattern
+    (@arg $i:ident, $env:ident, $expr:expr,
+        raw $param:ident: $ty:ident => $pat:pat
+    ) => {
+        let expr = $expr;
+
+        #[allow(irrefutable_let_patterns)]
+        let $pat = expr else {
+            return Err($i.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: Ty::$ty,
+                    got: None,
+                },
+                expr.span,
+            ));
+        };
+    };
+
+    // ---- EVALUATED arguments ----
+
+    // Any: no type checking
+    (@arg $i:ident, $env:ident, $expr:expr,
+        eval $param:ident: Any
+    ) => {
+        let $param = $i.run($expr, $env)?;
+    };
+
+    // Any with an explicit pattern
+    (@arg $i:ident, $env:ident, $expr:expr,
+        eval $param:ident: Any => $pat:pat
+    ) => {
+        let expr = $expr;
+        let value = $i.run(expr, $env)?;
+
+        #[allow(irrefutable_let_patterns)]
+        let $pat = value else {
+            return Err($i.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: Ty::Any,
+                    got: Some(value.ty()),
+                },
+                expr.span,
+            ));
+        };
+    };
+
+    // Typed argument without pattern
+    (@arg $i:ident, $env:ident, $expr:expr,
+        eval $param:ident: $ty:ident
+    ) => {
+        builtin!(@arg $i, $env, $expr,
+            eval $param: $ty => $param);
+    };
+
+    // Typed argument with pattern
+    (@arg $i:ident, $env:ident, $expr:expr,
+        eval $param:ident: $ty:ident => $pat:pat
+    ) => {
+        let expr = $expr;
+        let value = $i.run(expr, $env)?;
+        let got = value.ty();
+
+        #[allow(irrefutable_let_patterns)]
+        let Value::$ty($pat) = value else {
+            return Err($i.error(
+                RuntimeErrorKind::ExpectedValue {
+                    expected: Ty::$ty,
+                    got: Some(got),
+                },
+                expr.span,
+            ));
+        };
+    };
+
+    // ---- PUBLIC ENTRY POINT ----
+
     (
         $name:ident |$i:ident, $env:ident| (
             $(
-                $mode:ident $param:ident: $ty:ident => $pat:pat
+                $mode:ident $param:ident: $ty:ident
+                $(=> $pat:pat)?
             ),* $(,)?
         ) $body:block
     ) => {
@@ -52,16 +147,23 @@ macro_rules! builtin {
             Value::BuiltinFunction {
                 params: vec![
                     $(
-                        Pattern::Typed(Box::new(Pattern::Bind(stringify!(param).to_string())), Ty::$ty),
+                        Pattern::Typed(
+                            Box::new(Pattern::Bind(
+                                stringify!($param).to_string()
+                            )),
+                            Ty::$ty
+                        ),
                     )*
                 ],
 
                 #[allow(unused_variables, unused_mut)]
                 body: |$i, $env, args| {
-                    let expected = 0usize $(+ {
-                        let _ = stringify!($param);
-                        1usize
-                    })*;
+                    let expected = 0usize $(
+                        + {
+                            let _ = stringify!($param);
+                            1usize
+                        }
+                    )*;
 
                     if args.len() != expected {
                         miette::bail!(
@@ -74,19 +176,17 @@ macro_rules! builtin {
                     let mut iter = args.iter();
 
                     $(
-                        bind_arg!(
+                        builtin!(@arg
                             $i,
                             $env,
                             iter.next().unwrap(),
-                            $mode,
-                            Ty::$ty,
-                            $pat
+                            $mode $param: $ty $(=> $pat)?
                         );
                     )*
 
                     $body
                 },
-            },
+            }
         )
     };
 }
@@ -101,23 +201,23 @@ pub fn builtins() -> Vec<(String, Value)> {
     [
         builtin! {
             add |i, env| (
-                eval a: Number => Value::Number(a),
-                eval b: Number => Value::Number(b),
+                eval a: Number,
+                eval b: Number
             ) {
                 Ok(Value::Number(a + b))
             }
         },
         builtin! {
             mul |i, env| (
-                eval a: Number => Value::Number(a),
-                eval b: Number => Value::Number(b),
+                eval a: Number,
+                eval b: Number
             ) {
                 Ok(Value::Number(a * b))
             }
         },
         builtin! {
             println |i, env| (
-                eval v: Any => v
+                eval v: Any,
             ) {
                 println!("{v}");
                 Ok(atom!(unit))
@@ -126,7 +226,7 @@ pub fn builtins() -> Vec<(String, Value)> {
         builtin! {
             def |i, env| (
                 raw name: Any => e,
-                eval value: Any => value
+                eval value: Any,
             ) {
                 let pat: Pattern = e.try_into()?;
                 match pat.match_value(value) {
@@ -166,8 +266,8 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             prod |i, env| (
-                eval a: Any => a,
-                eval b: Any => b,
+                eval a: Any,
+                eval b: Any
                 ) {
 
                 Ok(Value::Product(Box::new(a), Box::new(b)))
@@ -175,7 +275,7 @@ pub fn builtins() -> Vec<(String, Value)> {
         },
         builtin! {
             case |i, env| (
-                eval value: Any => value,
+                eval value: Any,
                 raw branches: List => Expr { kind: ExprKind::List(list), span }
                 ) {
 
