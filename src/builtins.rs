@@ -5,48 +5,6 @@ use crate::{
     values::{Ty, Value},
 };
 
-macro_rules! bind_arg_raw {
-    ($i:expr, $env:expr, $expr:expr, $expected:expr, $pat:pat) => {
-        let expr = $expr;
-
-        #[allow(irrefutable_let_patterns)]
-        let $pat = expr else {
-            return Err($i.error(
-                RuntimeErrorKind::ExpectedValue {
-                    expected: $expected,
-                    got: None,
-                },
-                expr.span,
-            ));
-        };
-    };
-}
-
-macro_rules! bind_eval_arg {
-    ($i:expr, $env:expr, $expr:expr, Any, $param:ident) => {
-        let expr = $expr;
-        let value = $i.run(expr, $env)?;
-        let got = value.ty();
-
-        let $param = value;
-    };
-    ($i:expr, $env:expr, $expr:expr, $expected:ident, $param:ident) => {
-        let expr = $expr;
-        let value = $i.run(expr, $env)?;
-        let got = value.ty();
-
-        let Value::$expected($param) = value else {
-            return Err($i.error(
-                RuntimeErrorKind::ExpectedValue {
-                    expected: Ty::$expected,
-                    got: Some(got),
-                },
-                expr.span,
-            ));
-        };
-    };
-}
-
 macro_rules! builtin {
     // ---- RAW arguments ----
 
