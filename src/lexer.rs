@@ -24,6 +24,8 @@ pub enum TokenKind {
     OpenParen,  // (
     CloseParen, // )
 
+    Underscore, // _
+
     Ident,
 
     Number,
@@ -70,6 +72,10 @@ impl Lexer {
             Some(')') => {
                 self.index += 1;
                 Ok(self.single_char_token(TokenKind::CloseParen, ')'))
+            }
+            Some('_') => {
+                self.index += 1;
+                Ok(self.single_char_token(TokenKind::Underscore, '_'))
             }
             Some('\n') => {
                 self.index += 1;

@@ -24,6 +24,7 @@ pub enum ExprKind {
     StringLit(String),
     Ident(String),
     List(Vec<Expr>),
+    UnderscoreLit,
 }
 
 impl Display for ExprKind {
@@ -33,6 +34,7 @@ impl Display for ExprKind {
             ExprKind::NumberLit(n) => write!(f, "number literal {n}"),
             ExprKind::StringLit(s) => write!(f, "string literal {s}"),
             ExprKind::Ident(i) => write!(f, "identifier \"{i}\""),
+            ExprKind::UnderscoreLit => write!(f, "underscore literal"),
             ExprKind::List(exprs) => {
                 write!(
                     f,
@@ -95,6 +97,7 @@ impl Parser {
                 ))),
                 TokenKind::String => Some(Ok(Expr::new(ExprKind::StringLit(tk.lexeme), tk.span))),
                 TokenKind::Atom => Some(Ok(Expr::new(ExprKind::AtomLit(tk.lexeme), tk.span))),
+                TokenKind::Underscore => Some(Ok(Expr::new(ExprKind::UnderscoreLit, tk.span))),
                 TokenKind::Eof => None,
             },
             Err(e) => Some(Err(e)),

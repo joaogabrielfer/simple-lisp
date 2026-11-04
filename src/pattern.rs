@@ -99,6 +99,7 @@ impl TryFrom<&Expr> for Pattern {
                 Some((ExprKind::Ident(i), [])) => Ok(Pattern::Bind(i)),
                 _ => todo!("invalid pattern"),
             },
+            ExprKind::UnderscoreLit => Ok(Pattern::Wildcard),
         }
     }
 }

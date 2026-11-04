@@ -44,6 +44,10 @@ impl Interpreter {
                 }
             },
             ExprKind::List(exprs) => self.run_list(exprs, expr, env),
+            ExprKind::UnderscoreLit => Err(self.error(
+                RuntimeErrorKind::UnexpectedExpression(expr.kind.clone()),
+                expr.span,
+            )),
         }
     }
 
@@ -174,4 +178,6 @@ pub enum RuntimeErrorKind {
     MismatchedPattern { expected: Pattern, got: Value },
     #[error("pattern match is not exhaustive")]
     UnexhaustivePatternMatch,
+    #[error("unexpected expression {0}")]
+    UnexpectedExpression(ExprKind),
 }

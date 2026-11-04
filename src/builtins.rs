@@ -207,6 +207,7 @@ pub fn builtins() -> Vec<(String, Value)> {
                         ExprKind::NumberLit(n) => Pattern::Literal(Literal::Number(n)),
                         ExprKind::StringLit(s) => Pattern::Literal(Literal::String(s)),
                         ExprKind::Ident(i) => Pattern::Bind(i),
+                        ExprKind::UnderscoreLit => Pattern::Wildcard,
                         ExprKind::List(exprs) => {
                             miette::bail!("list cannot be parameters as of now");
                         }
