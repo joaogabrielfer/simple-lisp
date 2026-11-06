@@ -14,6 +14,7 @@ pub enum Pattern {
     Literal(Literal),
     Product(Box<Pattern>, Box<Pattern>),
     Typed(Box<Pattern>, Ty),
+    Range(i32, i32),
     List(Vec<Pattern>),
 }
 
@@ -48,6 +49,13 @@ impl Pattern {
                     }
                     bindings
                 })?,
+            (Pattern::Range(a, b), Value::Number(n)) => {
+                if (*a..*b).contains(&n) {
+                    Some(HashMap::new())
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -69,6 +77,7 @@ impl Display for Pattern {
                     .collect::<Vec<String>>()
                     .join(" ")
             ),
+            Pattern::Range(a, b) => write!(f, "{a}..{b}"),
         }
     }
 }
@@ -86,6 +95,9 @@ impl TryFrom<&Expr> for Pattern {
                 .split_first()
                 .map(|(head, tail)| (head.kind.clone(), tail))
             {
+                // TODO: refactor this as builtins also, making the builtin array be eithe
+                // ValueBuiltin or PatternBuiltin, with the interpreter consuming values and
+                // patterns being consumed here.
                 Some((ExprKind::Ident(s), rest)) if s == "prod" => {
                     if rest.len() != 2 {
                         todo!()
@@ -94,6 +106,23 @@ impl TryFrom<&Expr> for Pattern {
                             Box::new((&rest[0]).try_into()?),
                             Box::new((&rest[1]).try_into()?),
                         ))
+                    }
+                }
+                Some((ExprKind::Ident(s), rest)) if s == "range" => {
+                    if rest.len() != 2 {
+                        todo!()
+                    } else {
+                        let (ExprKind::NumberLit(a), ExprKind::NumberLit(b)) =
+                            (&rest[0].kind, &rest[1].kind)
+                        else {
+                            todo!("report expected numbers")
+                        };
+
+                        if a > b {
+                            todo!("ranges cannot be decreasing yet")
+                        }
+
+                        Ok(Pattern::Range(*a, *b))
                     }
                 }
                 Some((ExprKind::Ident(i), [])) => Ok(Pattern::Bind(i)),

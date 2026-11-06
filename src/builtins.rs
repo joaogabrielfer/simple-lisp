@@ -259,7 +259,7 @@ pub fn builtins() -> Vec<(String, Value)> {
 
                 Err(i.error(RuntimeErrorKind::UnexhaustivePatternMatch, *span))
             }
-        }
+        },
     ]
     .into()
 }
